@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
-import { TriageIngredient, UrgencyFilter, UrgencyTier } from '../types/kitchen';
+import {
+  TierProTips,
+  TriageIngredient,
+  UrgencyFilter,
+  UrgencyTier,
+} from '../types/kitchen';
 import { MaskedText } from './MaskedText';
 
 interface SpoilageBoardProps {
   ingredients: TriageIngredient[];
+  tierProTips: TierProTips;
   activeFilter: UrgencyFilter;
   onSelectFilter: (filter: UrgencyFilter, clientX: number, clientY: number) => void;
   revealKey: number;
@@ -51,6 +57,7 @@ const FILTERS: Array<{ id: UrgencyFilter; label: string }> = [
 
 export const SpoilageBoard: React.FC<SpoilageBoardProps> = ({
   ingredients,
+  tierProTips,
   activeFilter,
   onSelectFilter,
   revealKey,
@@ -188,6 +195,21 @@ export const SpoilageBoard: React.FC<SpoilageBoardProps> = ({
                     })}
                   </ul>
                 )}
+              </div>
+
+              {/* Contextual Shelf-Life Pro-Tip */}
+              <div className="mt-5 pt-4 border-t border-[#E5DDD0]">
+                <div className="p-3 rounded-lg bg-[#FAF6F0] border border-[#E5DDD0]">
+                  <p
+                    className="text-[11px] font-semibold uppercase tracking-wider"
+                    style={{ color: meta.accentColor }}
+                  >
+                    Pro-Tip · Extend Shelf Life
+                  </p>
+                  <p className="mt-1 text-xs text-[#231F1D] leading-relaxed">
+                    {tierProTips[tier]}
+                  </p>
+                </div>
               </div>
             </div>
           );

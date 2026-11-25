@@ -27,9 +27,12 @@ export interface RescueMeal {
   focusTier: UrgencyTier;
 }
 
+export type TierProTips = Record<UrgencyTier, string>;
+
 export interface TriageResult {
   detectedFromPhoto: string[];
   ingredients: TriageIngredient[];
+  tierProTips: TierProTips;
   meals: RescueMeal[];
 }
 

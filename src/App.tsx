@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlyToBasketLayer, FlyingTagItem } from './components/FlyToBasketLayer';
 import { FridgeNotepad } from './components/FridgeNotepad';
+import { HeroLogo } from './components/HeroLogo';
 import { BasketIcon } from './components/Icons';
 import { MaskedText } from './components/MaskedText';
 import { RescueMealCard } from './components/RescueMealCard';
@@ -374,10 +375,10 @@ export default function App() {
 
       {/* Top Navigation Bar (Clean 3-Zone Contract) */}
       <header className="sticky top-0 z-30 bg-[#FAF6F0] border-b border-[#E5DDD0]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 sm:gap-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 py-2.5 flex items-center justify-between gap-2 sm:gap-8">
           <a
             href="#top"
-            className="font-display text-lg sm:text-xl font-semibold tracking-tight text-[#231F1D] whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C84B31]"
+            className="font-display text-base sm:text-xl font-semibold tracking-tight text-[#231F1D] truncate min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C84B31]"
           >
             ShelfLife &amp; MealRescue
           </a>
@@ -411,11 +412,11 @@ export default function App() {
             ref={basketBadgeRef}
             key={`basket-${basketBounceKey}`}
             aria-live="polite"
-            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#FFFDF9] border border-[#E5DDD0] text-xs font-medium text-[#231F1D] whitespace-nowrap shrink-0 ${
+            className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg bg-[#FFFDF9] border border-[#E5DDD0] text-[11px] sm:text-xs font-medium text-[#231F1D] whitespace-nowrap shrink-0 ${
               basketBounceKey > 0 ? 'animate-basket-bounce' : ''
             }`}
           >
-            <BasketIcon className="w-4 h-4 text-[#3D6B52]" />
+            <BasketIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#3D6B52] shrink-0" />
             <span>Items Rescued</span>
             <span className="font-mono-code font-semibold text-[#3D6B52]">
               {rescuedCount}
@@ -426,22 +427,31 @@ export default function App() {
 
       <main id="top" className="flex-1">
         {/* Editorial Hero Section */}
-        <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-8 sm:pt-14 sm:pb-10">
-          <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.14em] text-[#C84B31] mb-3">
-            A FRIENDLY KITCHEN DESK FOR WHAT IS IN YOUR FRIDGE RIGHT NOW
-          </p>
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-8 sm:pt-12 sm:pb-10">
+          <div className="grid grid-cols-1 min-[900px]:grid-cols-[minmax(0,62%)_minmax(0,38%)] gap-7 min-[900px]:gap-8 lg:gap-10 items-center">
+            <div className="min-w-0 overflow-visible">
+              <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.14em] text-[#C84B31] mb-3">
+                A FRIENDLY KITCHEN DESK FOR WHAT IS IN YOUR FRIDGE RIGHT NOW
+              </p>
 
-          <MaskedText
-            as="h1"
-            lines={['TURN WHAT YOU HAVE', 'INTO DINNER TONIGHT']}
-            className="font-display text-[clamp(2.25rem,5vw,4.15rem)] leading-[1.04] font-semibold tracking-tight text-[#231F1D] max-w-4xl"
-          />
+              <MaskedText
+                as="h1"
+                lines={['TURN WHAT YOU HAVE', 'INTO DINNER TONIGHT']}
+                className="font-display text-[clamp(1.75rem,6.5vw,2.5rem)] min-[900px]:text-[clamp(2rem,3.6vw,3.15rem)] leading-[0.98] font-semibold tracking-[-0.02em] text-[#231F1D]"
+                lineClassName="min-[900px]:whitespace-nowrap"
+              />
 
-          <p className="mt-4 text-base sm:text-lg text-[#665D56] leading-relaxed max-w-2xl font-body">
-            Drop in a quick list of ingredients or snap a photo of your shelf. See
-            what needs cooking first, get simple ideas that fit real life, and
-            save good food from going to waste.
-          </p>
+              <p className="mt-4 text-base sm:text-lg text-[#665D56] leading-relaxed max-w-xl font-body">
+                Drop in a quick list of ingredients or snap a photo of your shelf. See
+                what needs cooking first, get simple ideas that fit real life, and
+                save good food from going to waste.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center min-w-0">
+              <HeroLogo />
+            </div>
+          </div>
         </section>
 
         {/* Kitchen Input Desk */}
@@ -490,6 +500,7 @@ export default function App() {
             {/* Spoilage Urgency Board */}
             <SpoilageBoard
               ingredients={triage.ingredients}
+              tierProTips={triage.tierProTips}
               activeFilter={activeFilter}
               onSelectFilter={handleSelectFilter}
               revealKey={revealKey}

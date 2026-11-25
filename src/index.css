@@ -56,7 +56,8 @@
 
 /* Masked line-by-line typography reveals */
 .mask-line-wrap {
-  overflow: hidden;
+  overflow-x: visible;
+  overflow-y: clip;
   display: block;
 }
 

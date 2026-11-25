@@ -3,6 +3,7 @@ import {
   KitchenMood,
   ProcessedImage,
   RescueMeal,
+  TierProTips,
   TriageIngredient,
   TriageResult,
   UrgencyTier,
@@ -150,6 +151,67 @@ function pickTop(items: TriageIngredient[], tier: UrgencyTier, limit: number): s
     .filter((i) => i.tier === tier)
     .slice(0, limit)
     .map((i) => i.name.replace(/\s*\([^)]*\)/g, '').trim());
+}
+
+function buildOfflineTierProTips(ingredients: TriageIngredient[]): TierProTips {
+  const tonightItems = ingredients.filter((i) => i.tier === 'use_tonight');
+  const nextItems = ingredients.filter((i) => i.tier === 'next_days');
+  const pantryItems = ingredients.filter((i) => i.tier === 'pantry_buffer');
+
+  const tonightJoined = tonightItems.map((i) => i.name.toLowerCase()).join(' ');
+  const nextJoined = nextItems.map((i) => i.name.toLowerCase()).join(' ');
+  const pantryJoined = pantryItems.map((i) => i.name.toLowerCase()).join(' ');
+
+  let useTonightTip =
+    'If plans change tonight, blanch soft produce for 60 seconds or freeze cooked portions flat in a sealed bag.';
+  if (/spinach|kale|greens|lettuce|arugula|cilantro|basil|parsley|dill/.test(tonightJoined)) {
+    useTonightTip =
+      'Tuck a dry paper towel inside your greens bag to absorb extra moisture, or blend soft herbs with olive oil into a quick freezer pesto.';
+  } else if (/tomato|avocado|berries/.test(tonightJoined)) {
+    useTonightTip =
+      'Keep ripe tomatoes out of the coldest back shelf, and brush cut avocado with lemon or lime before pressing wrap directly against the flesh.';
+  } else if (/bread|sourdough/.test(tonightJoined)) {
+    useTonightTip =
+      'Slice or cube stale bread right away and freeze in a sealed bag so it toasts straight into crisp croutons or warm melts later.';
+  } else if (/rice|rotisserie|chicken|leftover|cooked/.test(tonightJoined)) {
+    useTonightTip =
+      'Spread cooked leftovers or rice in a thin layer to cool quickly, then store in an airtight shallow container on the top shelf.';
+  }
+
+  let nextDaysTip =
+    'Move delicate items away from the fridge door onto a middle shelf where temperatures stay steady.';
+  if (/scallion|green onion/.test(nextJoined)) {
+    nextDaysTip =
+      'Stand scallions upright in a small jar with an inch of cold water, and re-wrap cut cheese in parchment rather than tight plastic wrap.';
+  } else if (/cheese|cheddar|mozzarella|goat cheese|feta|yogurt/.test(nextJoined)) {
+    nextDaysTip =
+      'Wrap cut blocks of cheese loosely in parchment inside a zip bag so moisture escapes without drying the edges out.';
+  } else if (/egg|tofu/.test(nextJoined)) {
+    nextDaysTip =
+      'Keep eggs in their carton on a middle shelf, and submerge opened tofu in fresh cold water changed every day to extend freshness.';
+  } else if (/zucchini|pepper|broccoli|cucumber|carrot|lemon|lime/.test(nextJoined)) {
+    nextDaysTip =
+      'Store dry, unwashed vegetables in a breathable crisper drawer and wait to rinse them until right before prepping.';
+  }
+
+  let pantryBufferTip =
+    'Keep dry staples sealed tight away from stove heat and steam to protect flavor and texture.';
+  if (/garlic|onion|potato|ginger/.test(pantryJoined)) {
+    pantryBufferTip =
+      'Store onions and garlic in an airy basket away from potatoes, since potatoes release moisture that makes alliums sprout faster.';
+  } else if (/jar|salsa|olive|curry|oil/.test(pantryJoined)) {
+    pantryBufferTip =
+      'Wipe open jar rims clean with a damp towel before tightening lids, and tuck opened curry paste or salsa toward the back of the fridge.';
+  } else if (/rice|beans|chickpea|tortilla/.test(pantryJoined)) {
+    pantryBufferTip =
+      'Keep open grains in airtight jars away from sunlight, and refrigerate or freeze extra tortillas with parchment between layers.';
+  }
+
+  return {
+    use_tonight: useTonightTip,
+    next_days: nextDaysTip,
+    pantry_buffer: pantryBufferTip,
+  };
 }
 
 function buildOfflineMeals(
@@ -377,11 +439,13 @@ export function runOfflineTriageFallback(input: TriageRunInput): TriageRunOutput
   }
 
   const meals = buildOfflineMeals(merged, input.mood);
+  const tierProTips = buildOfflineTierProTips(merged);
 
   return {
     result: {
       detectedFromPhoto: input.image ? photoItems : [],
       ingredients: merged,
+      tierProTips,
       meals,
     },
     source: 'offline',
@@ -425,7 +489,7 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
         `Kitchen Mood / Effort preference: ${input.mood}.`,
         photoNotes,
         textPrompt,
-        'Return a warm, practical spoilage triage and exactly 3 low-effort rescue meals prioritizing items that expire tonight.',
+        'Return a warm, practical spoilage triage, one contextually relevant shelf-life Pro-Tip for each urgency tier based on the specific items in that tier, and exactly 3 low-effort rescue meals prioritizing items that expire tonight.',
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -436,7 +500,7 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
       contents: { parts },
       config: {
         systemInstruction:
-          'You are a warm, encouraging, practical home kitchen companion helping someone turn fridge leftovers and pantry staples into dinner tonight. Never scold the user for forgotten groceries. Strictly avoid all emojis and strictly avoid em dashes in every field; use commas, colons, or periods instead. Classify every ingredient into one of three urgency tiers: use_tonight, next_days, or pantry_buffer. Return exactly 3 low-effort rescue meals shaped by the requested Kitchen Mood / Effort.',
+          'You are a warm, encouraging, practical home kitchen companion helping someone turn fridge leftovers and pantry staples into dinner tonight. Never scold the user for forgotten groceries. Strictly avoid all emojis and strictly avoid em dashes in every field; use commas, colons, or periods instead. Classify every ingredient into one of three urgency tiers: use_tonight, next_days, or pantry_buffer. For each tier, provide a practical shelf-life extension Pro-Tip tailored specifically to the ingredients in that category. Return exactly 3 low-effort rescue meals shaped by the requested Kitchen Mood / Effort.',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -470,6 +534,29 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
                 },
                 required: ['name', 'tier', 'freshnessWindow', 'tip'],
               },
+            },
+            tierProTips: {
+              type: Type.OBJECT,
+              description:
+                'Contextually relevant advice on extending the shelf life of ingredients in each urgency tier.',
+              properties: {
+                use_tonight: {
+                  type: Type.STRING,
+                  description:
+                    'Practical preservation Pro-Tip for the specific Use Tonight ingredients if they cannot all be cooked immediately.',
+                },
+                next_days: {
+                  type: Type.STRING,
+                  description:
+                    'Practical storage Pro-Tip to keep the specific Next 2-3 Days ingredients fresh longer.',
+                },
+                pantry_buffer: {
+                  type: Type.STRING,
+                  description:
+                    'Practical preservation Pro-Tip for the specific Pantry Buffer items.',
+                },
+              },
+              required: ['use_tonight', 'next_days', 'pantry_buffer'],
             },
             meals: {
               type: Type.ARRAY,
@@ -508,7 +595,7 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
               },
             },
           },
-          required: ['detectedFromPhoto', 'ingredients', 'meals'],
+          required: ['detectedFromPhoto', 'ingredients', 'tierProTips', 'meals'],
         },
       },
     });
@@ -527,6 +614,7 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
         tip: string;
         fromPhoto?: boolean;
       }>;
+      tierProTips?: Partial<TierProTips>;
       meals?: Array<Omit<RescueMeal, 'id'>>;
     };
 
@@ -543,6 +631,19 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
       tip: sanitize(item.tip || 'Keep visible near the front of the shelf.'),
       fromPhoto: Boolean(item.fromPhoto),
     }));
+
+    const fallbackProTips = buildOfflineTierProTips(ingredients);
+    const tierProTips: TierProTips = {
+      use_tonight: parsed.tierProTips?.use_tonight
+        ? sanitize(parsed.tierProTips.use_tonight)
+        : fallbackProTips.use_tonight,
+      next_days: parsed.tierProTips?.next_days
+        ? sanitize(parsed.tierProTips.next_days)
+        : fallbackProTips.next_days,
+      pantry_buffer: parsed.tierProTips?.pantry_buffer
+        ? sanitize(parsed.tierProTips.pantry_buffer)
+        : fallbackProTips.pantry_buffer,
+    };
 
     const meals: RescueMeal[] = (parsed.meals ?? []).slice(0, 3).map((meal, index) => ({
       id: `gem-meal-${index + 1}`,
@@ -569,6 +670,7 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
       result: {
         detectedFromPhoto: (parsed.detectedFromPhoto ?? []).map(sanitize),
         ingredients,
+        tierProTips,
         meals,
       },
       source: 'gemini',

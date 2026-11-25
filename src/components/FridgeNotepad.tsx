@@ -130,9 +130,9 @@ export const FridgeNotepad: React.FC<FridgeNotepadProps> = ({
       )}
 
       {/* Main Split Input Area */}
-      <div className="mt-5 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+      <div className="mt-5 grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
         {/* Text Notepad */}
-        <div className="lg:col-span-7 flex flex-col">
+        <div className="md:col-span-7 flex flex-col">
           <label
             htmlFor="fridge-notes-input"
             className="text-xs font-medium uppercase tracking-wider text-[#665D56] mb-2"
@@ -153,7 +153,7 @@ export const FridgeNotepad: React.FC<FridgeNotepadProps> = ({
         </div>
 
         {/* Photo Upload & Preview Panel */}
-        <div className="lg:col-span-5 flex flex-col">
+        <div className="md:col-span-5 flex flex-col">
           <span className="text-xs font-medium uppercase tracking-wider text-[#665D56] mb-2">
             Or snap your fridge shelf
           </span>
@@ -258,14 +258,14 @@ export const FridgeNotepad: React.FC<FridgeNotepadProps> = ({
                 Tap a tag to inspect, click x to remove a misread item, or label a backward jar.
               </p>
             </div>
-            <form onSubmit={handleAddLabel} className="flex items-center gap-2">
+            <form onSubmit={handleAddLabel} className="flex items-center gap-2 w-full sm:w-auto">
               <input
                 type="text"
                 value={newPhotoLabel}
                 onChange={(e) => setNewPhotoLabel(e.target.value)}
                 placeholder="Add hidden jar or item..."
                 aria-label="Add a label for an item in the photo"
-                className="px-3 py-1.5 text-xs rounded-md bg-[#FAF6F0] border border-[#E5DDD0] text-[#231F1D] placeholder:text-[#8E8277] w-44 sm:w-48 focus:bg-[#FFFDF9] focus:border-[#C84B31] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C84B31]"
+                className="flex-1 min-w-0 sm:w-48 px-3 py-1.5 text-xs rounded-md bg-[#FAF6F0] border border-[#E5DDD0] text-[#231F1D] placeholder:text-[#8E8277] focus:bg-[#FFFDF9] focus:border-[#C84B31] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C84B31]"
               />
               <button
                 type="submit"
