@@ -1,6 +1,6 @@
 import { ProcessedImage } from '../types/kitchen';
 
-const MAX_WIDTH = 1024;
+const MAX_DIMENSION = 1024;
 const JPEG_QUALITY = 0.82;
 
 export async function compressImageForTriage(file: File): Promise<ProcessedImage> {
@@ -14,7 +14,8 @@ export async function compressImageForTriage(file: File): Promise<ProcessedImage
       el.src = imageUrl;
     });
 
-    const scale = img.naturalWidth > MAX_WIDTH ? MAX_WIDTH / img.naturalWidth : 1;
+    const longestSide = Math.max(img.naturalWidth, img.naturalHeight);
+    const scale = longestSide > MAX_DIMENSION ? MAX_DIMENSION / longestSide : 1;
     const targetWidth = Math.max(1, Math.round(img.naturalWidth * scale));
     const targetHeight = Math.max(1, Math.round(img.naturalHeight * scale));
 
@@ -32,7 +33,8 @@ export async function compressImageForTriage(file: File): Promise<ProcessedImage
     ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
 
     const previewUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-    const base64 = previewUrl.replace(/^data:image\/jpeg;base64,/, '');
+    // Strip the data URL prefix (e.g. "data:image/jpeg;base64,") to get raw base64 for Gemini.
+    const base64 = previewUrl.slice(previewUrl.indexOf(',') + 1);
 
     return {
       base64,

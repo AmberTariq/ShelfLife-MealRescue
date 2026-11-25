@@ -24,7 +24,10 @@ interface FridgeNotepadProps {
   scenarioStatus: string;
   onSubmitTriage: () => void;
   isLoading: boolean;
+  isAnalyzingPhoto: boolean;
   imageError: string | null;
+  triageError: string | null;
+  triageNotice: string | null;
 }
 
 const MOODS: KitchenMood[] = [
@@ -49,7 +52,10 @@ export const FridgeNotepad: React.FC<FridgeNotepadProps> = ({
   scenarioStatus,
   onSubmitTriage,
   isLoading,
+  isAnalyzingPhoto,
   imageError,
+  triageError,
+  triageNotice,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -353,9 +359,44 @@ export const FridgeNotepad: React.FC<FridgeNotepadProps> = ({
           disabled={!canSubmit}
           className="px-6 py-3 rounded-lg bg-[#C84B31] hover:bg-[#B23F27] disabled:bg-[#D5C9B8] disabled:cursor-not-allowed text-[#FFFDF9] text-sm font-semibold tracking-tight transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#231F1D]"
         >
-          {isLoading ? 'Sorting Your Shelf...' : 'Triage My Fridge'}
+          {isLoading ? (isAnalyzingPhoto ? 'Analyzing Photo...' : 'Sorting Your Shelf...') : 'Triage My Fridge'}
         </button>
       </div>
+
+      {isLoading && (
+        <div
+          className="mt-4 flex items-center gap-3 rounded-lg border border-[#E5DDD0] bg-[#FFFDF9] px-4 py-3 text-sm text-[#231F1D]"
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[#C84B31] border-t-transparent"
+            aria-hidden="true"
+          />
+          {isAnalyzingPhoto
+            ? 'Gemini is analyzing your photo and reading what is actually on your shelves...'
+            : 'Gemini is sorting your ingredients and planning rescue meals...'}
+        </div>
+      )}
+
+      {!isLoading && triageError && (
+        <div
+          className="mt-4 rounded-lg border border-[#C84B31] bg-[#F5E6E0] px-4 py-3 text-sm text-[#8A2E1C]"
+          role="alert"
+        >
+          <p className="font-semibold">Analysis failed</p>
+          <p className="mt-1">{triageError}</p>
+        </div>
+      )}
+
+      {!isLoading && !triageError && triageNotice && (
+        <div
+          className="mt-4 rounded-lg border border-[#E5DDD0] bg-[#FFF8EC] px-4 py-3 text-sm text-[#665D56]"
+          role="status"
+        >
+          {triageNotice}
+        </div>
+      )}
     </section>
   );
 };

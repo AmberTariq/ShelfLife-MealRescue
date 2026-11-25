@@ -2,5 +2,5 @@
   "name": "ShelfLife & MealRescue",
   "description": "A warm kitchen pantry triage and low-effort meal rescue board powered by Gemini.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }
