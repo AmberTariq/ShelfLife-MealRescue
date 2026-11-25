@@ -19,6 +19,105 @@ export interface TriageRunInput {
 export interface TriageRunOutput {
   result: TriageResult;
   source: 'gemini' | 'offline';
+  /** True when a photo was analyzed and Gemini found no food items in it. */
+  noFoodInPhoto?: boolean;
+}
+
+export class GeminiTriageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GeminiTriageError';
+  }
+}
+
+const GEMINI_MODEL = 'gemini-3.8-flash';
+/** Secondary Flash models tried, in order, only when the primary model stays unavailable (503). */
+const GEMINI_FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+/** Backoff delays before each retry of the primary model on a transient 503 / UNAVAILABLE error. */
+const RETRY_DELAYS_MS = [600, 1500];
+
+function errorStatus(err: unknown): number | undefined {
+  const status = (err as { status?: unknown } | null)?.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/** True only for transient "model overloaded / unavailable" failures that are worth retrying. */
+function isTransientUnavailable(err: unknown): boolean {
+  if (errorStatus(err) === 503) return true;
+  const message = err instanceof Error ? err.message : String(err);
+  return /\b503\b|UNAVAILABLE|overloaded/i.test(message);
+}
+
+/** True when a model name is unknown or unsupported for this key, so the next fallback can be tried. */
+function isModelNotFound(err: unknown): boolean {
+  if (errorStatus(err) === 404) return true;
+  const message = err instanceof Error ? err.message : String(err);
+  return /\b404\b|NOT_FOUND/i.test(message);
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Calls Gemini with the primary model, retrying transient 503 / UNAVAILABLE errors with
+ * exponential backoff, then falling back to secondary Flash models. Non-transient errors
+ * (400, 401, 403, 429, network, etc.) are thrown immediately so the UI can show them.
+ */
+async function generateWithResilience<T>(call: (model: string) => Promise<T>): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await call(GEMINI_MODEL);
+    } catch (err) {
+      if (!isTransientUnavailable(err)) {
+        throw new GeminiTriageError(describeGeminiError(err, GEMINI_MODEL));
+      }
+      lastError = err;
+      if (attempt < RETRY_DELAYS_MS.length) {
+        await sleep(RETRY_DELAYS_MS[attempt]);
+      }
+    }
+  }
+
+  for (const model of GEMINI_FALLBACK_MODELS) {
+    try {
+      return await call(model);
+    } catch (err) {
+      if (isTransientUnavailable(err) || isModelNotFound(err)) {
+        lastError = err;
+        continue;
+      }
+      throw new GeminiTriageError(describeGeminiError(err, model));
+    }
+  }
+
+  const detail = lastError instanceof Error ? ` (${lastError.message})` : '';
+  throw new GeminiTriageError(
+    `Gemini is temporarily unavailable. ${GEMINI_MODEL} and the backup models are all overloaded right now, please try again in a minute.${detail}`
+  );
+}
+
+/** Strips any `data:<mime>;base64,` prefix so only raw base64 is sent to Gemini. */
+function toRawBase64(data: string): string {
+  const commaIndex = data.indexOf(',');
+  return data.startsWith('data:') && commaIndex !== -1 ? data.slice(commaIndex + 1) : data;
+}
+
+function describeGeminiError(err: unknown, model: string = GEMINI_MODEL): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/api key not valid|API_KEY_INVALID|permission|401|403/i.test(message)) {
+    return 'Gemini rejected the API key. Check that VITE_GEMINI_API_KEY is a valid Gemini API key.';
+  }
+  if (/404|NOT_FOUND|not found|is not supported/i.test(message)) {
+    return `Gemini model "${model}" is not available for this API key. Check the model name in src/services/geminiTriage.ts.`;
+  }
+  if (/quota|429|RESOURCE_EXHAUSTED/i.test(message)) {
+    return 'Gemini rate limit or quota reached. Please wait a moment and try again.';
+  }
+  if (/failed to fetch|network/i.test(message)) {
+    return 'Could not reach Gemini. Check your internet connection and try again.';
+  }
+  return `Gemini could not analyze your kitchen: ${message}`;
 }
 
 const USE_TONIGHT_KEYWORDS = [
@@ -399,19 +498,8 @@ export function runOfflineTriageFallback(input: TriageRunInput): TriageRunOutput
     .map(cleanItemText)
     .filter((item) => item.length > 1);
 
-  const photoItems =
-    input.editedPhotoItems && input.editedPhotoItems.length > 0
-      ? input.editedPhotoItems
-      : input.image
-        ? [
-            'leafy greens (top shelf)',
-            'open cheese pack',
-            '2 eggs',
-            'tomatoes',
-            'lemon half',
-            'jarred condiment',
-          ]
-        : [];
+  // Never invent photo contents: only use labels the user confirmed or Gemini detected.
+  const photoItems = input.editedPhotoItems ?? [];
 
   const merged: TriageIngredient[] = [];
   const seen = new Set<string>();
@@ -432,18 +520,12 @@ export function runOfflineTriageFallback(input: TriageRunInput): TriageRunOutput
     }
   });
 
-  if (merged.length === 0) {
-    ['baby spinach', 'ripe tomatoes', 'eggs', 'cheddar cheese', 'sourdough bread', 'olive oil'].forEach(
-      (item, idx) => merged.push(classifyIngredient(item, false, idx))
-    );
-  }
-
-  const meals = buildOfflineMeals(merged, input.mood);
+  const meals = merged.length > 0 ? buildOfflineMeals(merged, input.mood) : [];
   const tierProTips = buildOfflineTierProTips(merged);
 
   return {
     result: {
-      detectedFromPhoto: input.image ? photoItems : [],
+      detectedFromPhoto: photoItems,
       ingredients: merged,
       tierProTips,
       meals,
@@ -455,10 +537,16 @@ export function runOfflineTriageFallback(input: TriageRunInput): TriageRunOutput
 export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRunOutput> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return runOfflineTriageFallback(input);
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+    throw new GeminiTriageError(
+      'Gemini is not configured: VITE_GEMINI_API_KEY is missing. Add it to your environment and rebuild the app.'
+    );
+  }
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new GeminiTriageError('You appear to be offline, so Gemini cannot analyze your kitchen right now.');
   }
 
+  let response;
   try {
     const ai = new GoogleGenAI({ apiKey });
 
@@ -467,8 +555,8 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
     if (input.image) {
       parts.push({
         inlineData: {
-          mimeType: input.image.mimeType,
-          data: input.image.base64,
+          data: toRawBase64(input.image.base64),
+          mimeType: 'image/jpeg',
         },
       });
     }
@@ -478,29 +566,40 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
         ? `User-confirmed photo items: ${input.editedPhotoItems.join(', ')}.`
         : '';
 
+    const imageInstructions = input.image
+      ? [
+          'An image is attached. Look at it carefully and list in detectedFromPhoto ONLY food items you can actually see in this specific image.',
+          'Do not guess, do not add typical fridge staples, and do not invent items that are not clearly visible.',
+          'If the image does not show food, groceries, a fridge, or a pantry (for example a person, pet, landscape, screenshot, or object), return an empty detectedFromPhoto array and do not create any ingredients from the photo.',
+          'Mark ingredients that came from the photo with fromPhoto true.',
+        ].join(' ')
+      : 'No image was attached. detectedFromPhoto must be an empty array.';
+
     const textPrompt = input.rawText.trim()
       ? `Kitchen notes from user:\n${input.rawText.trim()}`
       : input.image
-        ? 'The user did not type notes. Rely primarily on the visible ingredients, produce, jars, and leftovers in the fridge photo.'
+        ? 'The user did not type notes. Use only the ingredients visible in the photo.'
         : 'No ingredients were provided.';
 
     parts.push({
       text: [
         `Kitchen Mood / Effort preference: ${input.mood}.`,
+        imageInstructions,
         photoNotes,
         textPrompt,
-        'Return a warm, practical spoilage triage, one contextually relevant shelf-life Pro-Tip for each urgency tier based on the specific items in that tier, and exactly 3 low-effort rescue meals prioritizing items that expire tonight.',
+        'Return a warm, practical spoilage triage, one contextually relevant shelf-life Pro-Tip for each urgency tier based on the specific items in that tier, and exactly 3 low-effort rescue meals prioritizing items that expire tonight. Only use ingredients from the visible photo items and the user notes. If there are no ingredients at all, return empty ingredients and meals arrays.',
       ]
         .filter(Boolean)
         .join('\n\n'),
     });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: { parts },
+    // Same client-side key and multimodal parts are reused for retries and fallback models.
+    response = await generateWithResilience((model) => ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts }],
       config: {
         systemInstruction:
-          'You are a warm, encouraging, practical home kitchen companion helping someone turn fridge leftovers and pantry staples into dinner tonight. Never scold the user for forgotten groceries. Strictly avoid all emojis and strictly avoid em dashes in every field; use commas, colons, or periods instead. Classify every ingredient into one of three urgency tiers: use_tonight, next_days, or pantry_buffer. For each tier, provide a practical shelf-life extension Pro-Tip tailored specifically to the ingredients in that category. Return exactly 3 low-effort rescue meals shaped by the requested Kitchen Mood / Effort.',
+          'You are a warm, encouraging, practical home kitchen companion helping someone turn fridge leftovers and pantry staples into dinner tonight. When an image is provided, you are an accurate visual inspector: report only food items genuinely visible in the image, never fabricate groceries, and return empty lists when the image contains no food. Never scold the user for forgotten groceries. Strictly avoid all emojis and strictly avoid em dashes in every field; use commas, colons, or periods instead. Classify every ingredient into one of three urgency tiers: use_tonight, next_days, or pantry_buffer. For each tier, provide a practical shelf-life extension Pro-Tip tailored specifically to the ingredients in that category. Return exactly 3 low-effort rescue meals shaped by the requested Kitchen Mood / Effort.',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -598,13 +697,18 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
           required: ['detectedFromPhoto', 'ingredients', 'tierProTips', 'meals'],
         },
       },
-    });
+    }));
+  } catch (err) {
+    if (err instanceof GeminiTriageError) throw err;
+    throw new GeminiTriageError(describeGeminiError(err));
+  }
 
-    const rawJson = (response.text ?? '').trim();
-    if (!rawJson) {
-      return runOfflineTriageFallback(input);
-    }
+  const rawJson = (response.text ?? '').trim();
+  if (!rawJson) {
+    throw new GeminiTriageError('Gemini returned an empty response. Please try again.');
+  }
 
+  try {
     const parsed = JSON.parse(rawJson) as {
       detectedFromPhoto?: string[];
       ingredients?: Array<{
@@ -662,20 +766,19 @@ export async function runKitchenTriage(input: TriageRunInput): Promise<TriageRun
           : 'use_tonight',
     }));
 
-    if (ingredients.length === 0 || meals.length === 0) {
-      return runOfflineTriageFallback(input);
-    }
+    const detectedFromPhoto = input.image ? (parsed.detectedFromPhoto ?? []).map(sanitize).filter(Boolean) : [];
 
     return {
       result: {
-        detectedFromPhoto: (parsed.detectedFromPhoto ?? []).map(sanitize),
+        detectedFromPhoto,
         ingredients,
         tierProTips,
         meals,
       },
       source: 'gemini',
+      noFoodInPhoto: Boolean(input.image) && detectedFromPhoto.length === 0,
     };
   } catch {
-    return runOfflineTriageFallback(input);
+    throw new GeminiTriageError('Gemini returned a response that could not be read. Please try again.');
   }
 }

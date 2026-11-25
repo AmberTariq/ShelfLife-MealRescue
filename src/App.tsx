@@ -76,6 +76,9 @@ export default function App() {
   );
   const [activeFilter, setActiveFilter] = useState<UrgencyFilter>('all');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState<boolean>(false);
+  const [triageError, setTriageError] = useState<string | null>(null);
+  const [triageNotice, setTriageNotice] = useState<string | null>(null);
   const [revealKey, setRevealKey] = useState<number>(1);
   const [cookedMealIds, setCookedMealIds] = useState<Record<string, boolean>>({});
 
@@ -189,6 +192,9 @@ export default function App() {
       nextPhotoItems: string[];
     }) => {
       setIsLoading(true);
+      setIsAnalyzingPhoto(Boolean(params.nextImage));
+      setTriageError(null);
+      setTriageNotice(null);
       try {
         const output = await runKitchenTriage({
           rawText: params.text,
@@ -198,15 +204,27 @@ export default function App() {
         });
 
         setTriage(output.result);
-        if (params.nextImage && output.result.detectedFromPhoto.length > 0) {
+        if (params.nextImage) {
           setPhotoItems(output.result.detectedFromPhoto);
+        }
+        if (output.noFoodInPhoto) {
+          setTriageNotice(
+            'Gemini did not spot any food in that photo. Try a clearer shot of your fridge or pantry shelves, or type your items in the notepad.'
+          );
+        } else if (output.result.ingredients.length === 0) {
+          setTriageNotice('No ingredients were found to triage. Add a fridge photo or type a few items.');
         }
         setCookedMealIds({});
         setActiveFilter('all');
         setRevealKey((k) => k + 1);
         triggerRadialWash('tonight');
+      } catch (err) {
+        setTriageError(
+          err instanceof Error ? err.message : 'Gemini could not analyze your kitchen. Please try again.'
+        );
       } finally {
         setIsLoading(false);
+        setIsAnalyzingPhoto(false);
       }
     },
     [triggerRadialWash]
@@ -472,7 +490,10 @@ export default function App() {
             scenarioStatus={scenarioStatus}
             onSubmitTriage={handleSubmitTriage}
             isLoading={isLoading}
+            isAnalyzingPhoto={isAnalyzingPhoto}
             imageError={imageError}
+            triageError={triageError}
+            triageNotice={triageNotice}
           />
         </div>
 
